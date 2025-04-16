@@ -4,91 +4,23 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Smile, Paperclip, Send, Phone, Video, MoreVertical } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Message {
   id: string;
-  text: string;
-  sent: boolean;
-  time: string;
+  content: string;
+  sender_id: string;
+  receiver_id: string;
+  created_at: string;
 }
 
-interface Conversation {
+interface User {
   id: string;
-  name: string;
-  avatar: string;
-  isOnline: boolean;
-  lastSeen?: string;
-  messages: Message[];
+  name: string | null;
+  email: string;
+  image: string | null;
 }
-
-const dummyConversations: Record<string, Conversation> = {
-  "1": {
-    id: "1",
-    name: "Sarah Johnson",
-    avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=100&h=100",
-    isOnline: true,
-    messages: [
-      { id: "1", text: "Hey, how's it going?", sent: false, time: "10:30 AM" },
-      { id: "2", text: "I'm good! Just finished that project we talked about.", sent: true, time: "10:32 AM" },
-      { id: "3", text: "That's great! Can you send me the files?", sent: false, time: "10:33 AM" },
-      { id: "4", text: "Sure, I'll email them to you in a bit.", sent: true, time: "10:35 AM" },
-      { id: "5", text: "Thanks! Also, are we still on for coffee tomorrow?", sent: false, time: "10:36 AM" },
-      { id: "6", text: "Yes, definitely! Looking forward to it.", sent: true, time: "10:38 AM" },
-      { id: "7", text: "Great! See you at the usual place at 2pm?", sent: false, time: "10:40 AM" },
-      { id: "8", text: "Perfect. See you then!", sent: true, time: "10:42 AM" },
-    ]
-  },
-  "2": {
-    id: "2",
-    name: "Mike Peterson",
-    avatar: "https://images.unsplash.com/photo-1583864697784-a0efc8379f70?auto=format&fit=crop&q=80&w=100&h=100",
-    isOnline: false,
-    lastSeen: "Yesterday at 7:23 PM",
-    messages: [
-      { id: "1", text: "Hey Mike, about that meeting tomorrow", sent: true, time: "Yesterday" },
-      { id: "2", text: "Let's meet at 6pm tomorrow instead of 5pm", sent: false, time: "Yesterday" },
-      { id: "3", text: "That works for me. Same place?", sent: true, time: "Yesterday" },
-      { id: "4", text: "Yes, at the office conference room", sent: false, time: "Yesterday" },
-    ]
-  },
-  "3": {
-    id: "3",
-    name: "Emma Wilson",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100&h=100",
-    isOnline: true,
-    messages: [
-      { id: "1", text: "Did you see the new movie that just came out?", sent: false, time: "Yesterday" },
-      { id: "2", text: "Not yet, is it good?", sent: true, time: "Yesterday" },
-      { id: "3", text: "It's amazing! We should go watch it this weekend", sent: false, time: "Yesterday" },
-    ]
-  },
-  "4": {
-    id: "4",
-    name: "David Chen",
-    avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=100&h=100",
-    isOnline: false,
-    lastSeen: "Monday at 1:45 PM",
-    messages: [
-      { id: "1", text: "I needed help with the presentation", sent: false, time: "Monday" },
-      { id: "2", text: "What do you need help with?", sent: true, time: "Monday" },
-      { id: "3", text: "Just needed some design tips, but I figured it out", sent: false, time: "Monday" },
-      { id: "4", text: "Thanks for the help anyway!", sent: false, time: "Monday" },
-    ]
-  },
-  "5": {
-    id: "5",
-    name: "Amy Taylor",
-    avatar: "https://images.unsplash.com/photo-1500917293891-ef795e70e1f6?auto=format&fit=crop&q=80&w=100&h=100",
-    isOnline: true,
-    messages: [
-      { id: "1", text: "Team meeting today at 2pm", sent: false, time: "Sunday" },
-      { id: "2", text: "I'll be there", sent: true, time: "Sunday" },
-      { id: "3", text: "Actually, can we reschedule to 3pm?", sent: false, time: "Sunday" },
-      { id: "4", text: "Sure, that works for me", sent: true, time: "Sunday" },
-      { id: "5", text: "Great, meeting rescheduled to 3pm", sent: false, time: "Sunday" },
-    ]
-  },
-};
 
 interface ChatAreaProps {
   conversationId: string | null;
@@ -96,46 +28,160 @@ interface ChatAreaProps {
 
 const ChatArea = ({ conversationId }: ChatAreaProps) => {
   const [newMessage, setNewMessage] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [targetUser, setTargetUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const { toast } = useToast();
 
+  // Fetch current user
   useEffect(() => {
-    if (conversationId && dummyConversations[conversationId]) {
-      setConversation(dummyConversations[conversationId]);
-    } else {
-      setConversation(null);
-    }
-  }, [conversationId]);
+    const fetchCurrentUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user) {
+        // Get more user details from the users table
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+        
+        if (!error && userData) {
+          setCurrentUser(userData);
+        } else {
+          setCurrentUser({
+            id: data.user.id,
+            name: data.user.user_metadata?.full_name,
+            email: data.user.email || '',
+            image: data.user.user_metadata?.avatar_url
+          });
+        }
+      }
+    };
 
+    fetchCurrentUser();
+  }, []);
+
+  // Fetch target user & messages when conversation changes
+  useEffect(() => {
+    const fetchConversation = async () => {
+      if (!conversationId || !currentUser) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        // Get target user details
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', conversationId)
+          .single();
+
+        if (userError) throw userError;
+        setTargetUser(userData);
+
+        // Get messages between current user and target user
+        const { data: messagesData, error: messagesError } = await supabase
+          .from('messages')
+          .select('*')
+          .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${conversationId}),and(sender_id.eq.${conversationId},receiver_id.eq.${currentUser.id})`)
+          .order('created_at', { ascending: true });
+
+        if (messagesError) throw messagesError;
+        setMessages(messagesData || []);
+      } catch (error) {
+        console.error('Error fetching conversation:', error);
+        toast({
+          title: "Error loading conversation",
+          description: "Please try again later",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchConversation();
+  }, [conversationId, currentUser, toast]);
+
+  // Subscribe to new messages
+  useEffect(() => {
+    if (!conversationId || !currentUser) return;
+
+    const channel = supabase
+      .channel('new-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `or(and(sender_id=eq.${currentUser.id},receiver_id=eq.${conversationId}),and(sender_id=eq.${conversationId},receiver_id=eq.${currentUser.id}))`,
+        },
+        (payload) => {
+          const newMessage = payload.new as Message;
+          setMessages(prev => [...prev, newMessage]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, currentUser]);
+
+  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversation?.messages]);
+  }, [messages]);
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim() || !conversationId) return;
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !conversationId || !currentUser) return;
 
-    const newMsg: Message = {
-      id: Date.now().toString(),
-      text: newMessage,
-      sent: true,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          content: newMessage,
+          sender_id: currentUser.id,
+          receiver_id: conversationId,
+        });
 
-    const updatedConvo = { 
-      ...dummyConversations[conversationId],
-      messages: [...dummyConversations[conversationId].messages, newMsg]
-    };
-
-    // In a real app, we would update the state properly and persist to backend
-    dummyConversations[conversationId] = updatedConvo;
-    setConversation(updatedConvo);
-    setNewMessage("");
+      if (error) throw error;
+      setNewMessage("");
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast({
+        title: "Error sending message",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    }
   };
 
-  if (!conversation) {
+  if (!conversationId) {
     return (
       <div className="flex-1 flex items-center justify-center bg-slate-50 text-muted-foreground">
         Select a conversation to start messaging
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-slate-50 text-muted-foreground">
+        Loading conversation...
+      </div>
+    );
+  }
+
+  if (!targetUser) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-slate-50 text-muted-foreground">
+        User not found
       </div>
     );
   }
@@ -146,12 +192,16 @@ const ChatArea = ({ conversationId }: ChatAreaProps) => {
       <div className="p-3 border-b flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10">
-            <img src={conversation.avatar} alt={conversation.name} className="object-cover" />
+            <img 
+              src={targetUser.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(targetUser.name || targetUser.email)}`} 
+              alt={targetUser.name || targetUser.email} 
+              className="object-cover" 
+            />
           </Avatar>
           <div>
-            <h3 className="font-medium">{conversation.name}</h3>
+            <h3 className="font-medium">{targetUser.name || targetUser.email}</h3>
             <p className="text-xs text-muted-foreground">
-              {conversation.isOnline ? "Online" : `Last seen ${conversation.lastSeen}`}
+              Active now
             </p>
           </div>
         </div>
@@ -171,26 +221,42 @@ const ChatArea = ({ conversationId }: ChatAreaProps) => {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
         <div className="space-y-4">
-          {conversation.messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.sent ? "justify-end" : "justify-start"}`}
-            >
-              {!message.sent && (
-                <Avatar className="h-8 w-8 mr-2 self-end">
-                  <img src={conversation.avatar} alt={conversation.name} className="object-cover" />
-                </Avatar>
-              )}
-              <div className="flex flex-col">
-                <div className={message.sent ? "message-sent" : "message-received"}>
-                  {message.text}
-                </div>
-                <span className="text-xs text-muted-foreground mt-1 px-2">
-                  {message.time}
-                </span>
-              </div>
+          {messages.length === 0 ? (
+            <div className="text-center text-muted-foreground p-4">
+              No messages yet. Send a message to start the conversation!
             </div>
-          ))}
+          ) : (
+            messages.map((message) => {
+              const isSent = message.sender_id === currentUser?.id;
+              return (
+                <div
+                  key={message.id}
+                  className={`flex ${isSent ? "justify-end" : "justify-start"}`}
+                >
+                  {!isSent && (
+                    <Avatar className="h-8 w-8 mr-2 self-end">
+                      <img 
+                        src={targetUser.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(targetUser.name || targetUser.email)}`} 
+                        alt={targetUser.name || targetUser.email} 
+                        className="object-cover" 
+                      />
+                    </Avatar>
+                  )}
+                  <div className="flex flex-col">
+                    <div className={isSent ? "message-sent" : "message-received"}>
+                      {message.content}
+                    </div>
+                    <span className="text-xs text-muted-foreground mt-1 px-2">
+                      {new Date(message.created_at).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
           <div ref={messagesEndRef} />
         </div>
       </div>
