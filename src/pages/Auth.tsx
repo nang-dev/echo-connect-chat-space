@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { createClient } from '@supabase/supabase-js';
 import { Button } from "@/components/ui/button";
@@ -8,21 +8,47 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { AlertCircle } from "lucide-react";
 
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Initialize Supabase client with fallback for missing env variables
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Create client only if URL and key are available
+const supabase = supabaseUrl && supabaseAnonKey 
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [configError, setConfigError] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (!supabase) {
+      setConfigError(true);
+      toast({
+        title: "Configuration Error",
+        description: "Supabase configuration is missing. Please check your environment variables.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) {
+      toast({
+        title: "Error",
+        description: "Supabase is not initialized",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setLoading(true);
     
     try {
@@ -52,6 +78,15 @@ const Auth = () => {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) {
+      toast({
+        title: "Error",
+        description: "Supabase is not initialized",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setLoading(true);
     
     try {
@@ -76,6 +111,34 @@ const Auth = () => {
       setLoading(false);
     }
   };
+
+  if (configError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-muted/40">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-center">Configuration Error</CardTitle>
+            <CardDescription className="text-center text-red-500 flex items-center justify-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              Supabase configuration is missing
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-4">
+            <p>To fix this issue, please make sure you have set the following environment variables:</p>
+            <div className="bg-muted p-3 rounded-md text-sm">
+              <p><code>VITE_SUPABASE_URL</code> - Your Supabase project URL</p>
+              <p><code>VITE_SUPABASE_ANON_KEY</code> - Your Supabase anonymous key</p>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button onClick={() => navigate("/")} className="w-full">
+              Return to Home
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-muted/40">

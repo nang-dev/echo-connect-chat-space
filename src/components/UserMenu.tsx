@@ -6,10 +6,14 @@ import { Settings, LogOut, LogIn, MessageSquare, Users } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { useToast } from "@/hooks/use-toast";
 
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Initialize Supabase client with fallback for missing env variables
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Create client only if URL and key are available
+const supabase = supabaseUrl && supabaseAnonKey 
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 const UserMenu = () => {
   const [user, setUser] = useState<any>(null);
@@ -17,6 +21,17 @@ const UserMenu = () => {
   const { toast } = useToast();
 
   useEffect(() => {
+    // Skip if Supabase is not initialized
+    if (!supabase) {
+      setLoading(false);
+      toast({
+        title: "Configuration Error",
+        description: "Supabase configuration is missing. Please check your environment variables.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Check for active session on component mount
     const checkSession = async () => {
       try {
@@ -67,6 +82,15 @@ const UserMenu = () => {
   }, [toast]);
 
   const handleSignOut = async () => {
+    if (!supabase) {
+      toast({
+        title: "Error",
+        description: "Supabase is not initialized",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       await supabase.auth.signOut();
     } catch (error) {
@@ -83,6 +107,19 @@ const UserMenu = () => {
     return (
       <div className="p-3 border-t flex items-center justify-center">
         <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  // Show error message if Supabase is not initialized
+  if (!supabase) {
+    return (
+      <div className="p-3 border-t flex items-center justify-between">
+        <p className="text-sm text-red-500">Supabase configuration missing</p>
+        <Button variant="default" size="sm" onClick={() => window.location.href = "/auth"}>
+          <Settings className="h-4 w-4 mr-2" />
+          Setup
+        </Button>
       </div>
     );
   }
