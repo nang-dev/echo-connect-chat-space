@@ -3,68 +3,31 @@ import { useEffect, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Settings, LogOut, LogIn, MessageSquare, Users } from "lucide-react";
-import { createClient } from '@supabase/supabase-js';
 import { useToast } from "@/hooks/use-toast";
-
-// Initialize Supabase client with fallback for missing env variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-// Create client only if URL and key are available
-const supabase = supabaseUrl && supabaseAnonKey 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import type { User, Session } from "@supabase/supabase-js";
 
 const UserMenu = () => {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    // Skip if Supabase is not initialized
-    if (!supabase) {
-      setLoading(false);
-      toast({
-        title: "Configuration Error",
-        description: "Supabase configuration is missing. Please check your environment variables.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check for active session on component mount
-    const checkSession = async () => {
-      try {
-        const { data, error } = await supabase.auth.getSession();
+    // Set up auth state change listener first
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
         
-        if (error) {
-          console.error("Error fetching session:", error);
-        } else if (data?.session) {
-          // Get user details if session exists
-          const { data: userData } = await supabase.auth.getUser();
-          setUser(userData.user);
-        }
-      } catch (error) {
-        console.error("Session check error:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkSession();
-
-    // Set up auth state change listener
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === "SIGNED_IN" && session) {
-          const { data: userData } = await supabase.auth.getUser();
-          setUser(userData.user);
+        if (event === "SIGNED_IN") {
           toast({
             title: "Signed in successfully",
             description: "Welcome back!",
           });
         } else if (event === "SIGNED_OUT") {
-          setUser(null);
           toast({
             title: "Signed out",
             description: "You have been signed out successfully",
@@ -73,24 +36,20 @@ const UserMenu = () => {
       }
     );
 
+    // Then check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
     return () => {
       // Clean up the listener on unmount
-      if (authListener && authListener.subscription) {
-        authListener.subscription.unsubscribe();
-      }
+      subscription.unsubscribe();
     };
   }, [toast]);
 
   const handleSignOut = async () => {
-    if (!supabase) {
-      toast({
-        title: "Error",
-        description: "Supabase is not initialized",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
       await supabase.auth.signOut();
     } catch (error) {
@@ -111,24 +70,11 @@ const UserMenu = () => {
     );
   }
 
-  // Show error message if Supabase is not initialized
-  if (!supabase) {
-    return (
-      <div className="p-3 border-t flex items-center justify-between">
-        <p className="text-sm text-red-500">Supabase configuration missing</p>
-        <Button variant="default" size="sm" onClick={() => window.location.href = "/auth"}>
-          <Settings className="h-4 w-4 mr-2" />
-          Setup
-        </Button>
-      </div>
-    );
-  }
-
   if (!user) {
     return (
       <div className="p-3 border-t flex items-center justify-between">
         <p className="text-sm text-muted-foreground">Not signed in</p>
-        <Button variant="default" size="sm" onClick={() => window.location.href = "/auth"}>
+        <Button variant="default" size="sm" onClick={() => navigate("/auth")}>
           <LogIn className="h-4 w-4 mr-2" />
           Sign In
         </Button>
