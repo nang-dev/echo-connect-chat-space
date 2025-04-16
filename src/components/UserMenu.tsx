@@ -2,11 +2,12 @@
 import { useEffect, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Settings, LogOut, LogIn, MessageSquare, Users } from "lucide-react";
+import { Settings, LogOut, LogIn, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
+import FriendManager from "./FriendManager";
 
 const UserMenu = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -102,9 +103,7 @@ const UserMenu = () => {
         <Button variant="ghost" size="icon" className="text-muted-foreground">
           <MessageSquare className="h-5 w-5" />
         </Button>
-        <Button variant="ghost" size="icon" className="text-muted-foreground">
-          <Users className="h-5 w-5" />
-        </Button>
+        <FriendManager />
         <Button variant="ghost" size="icon" className="text-muted-foreground">
           <Settings className="h-5 w-5" />
         </Button>

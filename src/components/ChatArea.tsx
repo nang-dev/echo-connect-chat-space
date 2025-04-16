@@ -111,8 +111,9 @@ const ChatArea = ({ conversationId }: ChatAreaProps) => {
   useEffect(() => {
     if (!conversationId || !currentUser) return;
 
+    // Set up real-time subscription to messages
     const channel = supabase
-      .channel('new-messages')
+      .channel('messages-channel')
       .on(
         'postgres_changes',
         {
